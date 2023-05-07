@@ -9,17 +9,14 @@ const copyFiles = async () => {
   try {
     await fsRm(destFolderPath);
     await fsPromises.mkdir(destFolderPath, { recursive: true });
-    await fsPromises
-      .readdir(sourceFolderPath, { withFileTypes: true })
-      .then(async (files) => {
-        for (const file of files) {
-          if (file.isFile()) {
-            const sourceFile = path.join(sourceFolderPath, file.name);
-            const destFile = path.join(destFolderPath, file.name);
-            await fsPromises.copyFile(sourceFile, destFile);
-          }
-        }
-      });
+    const files = await fsPromises.readdir(sourceFolderPath, { withFileTypes: true });
+    for (const file of files) {
+      if (file.isFile()) {
+        const sourceFile = path.join(sourceFolderPath, file.name);
+        const destFile = path.join(destFolderPath, file.name);
+        await fsPromises.copyFile(sourceFile, destFile);
+      }
+    }
   } catch (error) {
     console.error(error);
   }
