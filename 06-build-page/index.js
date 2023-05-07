@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const fsPromises = fs.promises;
 
 // source Paths
 
@@ -15,148 +16,107 @@ const distFullPath = path.join(__dirname, './project-dist');
 const distStyleFilePath = path.join(distFullPath, 'style.css');
 const distHtmlFilePath = path.join(distFullPath, 'index.html');
 
-const removeOldDist = (dir) => {
+const buildDist = async () => {
+  try {
+    await fsPromises.rm(distFullPath, { force: true, recursive: true });
+    await fsPromises.mkdir(distFullPath, { recursive: true });
+    const components = await readComponentsFromFolder(componentsFolderPath);
+    const template = await readFileToString(templateFilePath);
+    await buildHtmlPageFromTemplate(distHtmlFilePath, template, components);
+    const styles = await readStylesFromFolder(styleFolderPath);
+    await buildStyleBundle(distStyleFilePath, styles);
+    copyAssetsFiles(assetsFolderName);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const readComponentsFromFolder = async (dir) => {
+  const components = [];
+  const componentFiles = await fsPromises.readdir(dir, { withFileTypes: true });
+  const componentHtmlFiles = componentFiles.filter((file) => file.isFile() && path.extname(file.name) === '.html');
+  for (const componentHtmlFile of componentHtmlFiles) {
+    if (componentHtmlFile.isFile()) {
+      const pathFile = path.join(dir, componentHtmlFile.name);
+      const component = {};
+      component.html = await readFileToString(pathFile);
+      component.name = componentHtmlFile.name.slice(0, componentHtmlFile.name.lastIndexOf('.'));
+      components.push(component);
+    }
+  }
+  return components;
+};
+
+const readFileToString = (file) => {
   return new Promise((resolve, reject) => {
-    fs.rm(dir, { recursive: true }, (err) => {
-      if (err && err.code !== 'ENOENT') {
-        reject(err);
-      }
-      resolve(dir);
-    });
+    const readStream = fs.createReadStream(file);
+    let str = '';
+    readStream.on('data', (chank) => (str += chank.toString()));
+    readStream.on('error', (error) => reject(new Error(error)));
+    readStream.on('end', () => resolve(str));
   });
 };
 
-const createDistFolder = (dir) => {
+const buildHtmlPageFromTemplate = (path, template, components) => {
   return new Promise((resolve, reject) => {
-    fs.mkdir(dir, (err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      process.stdout.write(`Folder ${distFullPath} was created successful\n`);
+    components.forEach((component) => {
+      template = template.replace(`{{${component.name}}}`, component.html);
+    });
+    const writeStream = fs.createWriteStream(path);
+    writeStream.write(template, (error) => {
+      if (error) reject(new Error(error));
       resolve();
     });
   });
 };
 
-const readComponentsHtmlFiles = (dir) => {
-  return new Promise((resolve, reject) => {
-    fs.readdir(dir, { withFileTypes: true }, (error, data) => {
-      if (error) {
-        reject(error);
-      }
-      const componentsArr = [];
-      const templatesFiles = data.filter((file) => file.isFile() && path.extname(file.name) === '.html');
-      Promise.all(
-        templatesFiles.map((templatesFile) => {
-          return new Promise((res, rej) => {
-            const filePath = path.join(componentsFolderPath, templatesFile.name);
-            fs.readFile(filePath, (error, data) => {
-              if (error) {
-                rej(error);
-              }
-              const componentData = {};
-              componentData.name = templatesFile.name.slice(0, templatesFile.name.lastIndexOf('.'));
-              componentData.html = data.toString();
-              componentsArr.push(componentData);
-              res();
-            });
-          });
-        })
-      ).then(() => resolve(componentsArr));
-    });
-  });
-};
-
-const buildHtmlPageFromTemplate = (template, components) => {
-  return new Promise((resolve, reject) => {
-    fs.readFile(template, (error, data) => {
-      if (error) {
-        reject(error);
-      }
-      let templateData = data.toString();
-      components.forEach((component) => {
-        templateData = templateData.replace(`{{${component.name}}}`, component.html);
-      });
-      const writeStream = fs.createWriteStream(distHtmlFilePath);
-      writeStream.write(templateData);
-      resolve();
-    });
-  });
-};
-
-const readStylesData = (stylesFolder) => {
-  return new Promise((resolve, reject) => {
-    fs.readdir(stylesFolder, { withFileTypes: true }, (error, data) => {
-      if (error) {
-        return reject(error);
-      }
-      const stylesData = [];
-      const styleFiles = data.filter((file) => file.isFile() && path.extname(file.name) === '.css');
-      Promise.all(
-        styleFiles.map((styleFile) => {
-          return new Promise((res, rej) => {
-            const fileFullPath = path.join(styleFolderPath, styleFile.name);
-            const readStream = fs.createReadStream(fileFullPath);
-            readStream.on('error', (err) => {
-              rej(err);
-            });
-            readStream.on('data', (chank) => {
-              stylesData.push(`${chank}\n`);
-            });
-            readStream.on('end', () => {
-              return res();
-            });
-          });
-        })
-      ).then(() => resolve(stylesData));
-    });
-  });
-};
-
-const copyAssetsFiles = (folderName) => {
-  const distAssetsFolderPath = path.join(distFullPath, folderName);
-  fs.mkdir(distAssetsFolderPath, (err) => {
-    if (err) return console.log(err);
-    copyAllFiles(folderName);
-  });
+const readStylesFromFolder = async (dir) => {
+  const stylesData = [];
+  const styleFiles = await fsPromises.readdir(dir, { withFileTypes: true });
+  const styleCssFiles = styleFiles.filter((file) => file.isFile() && path.extname(file.name) === '.css');
+  for (const styleCssFile of styleCssFiles) {
+    const pathFile = path.join(dir, styleCssFile.name);
+    const data = await readFileToString(pathFile);
+    stylesData.push(data);
+  }
+  return stylesData;
 };
 
 const buildStyleBundle = (bundlePath, stylesData) => {
   return new Promise((resolve, reject) => {
     const writeStream = fs.createWriteStream(bundlePath);
-    stylesData.forEach((data) => {
-      writeStream.write(data, (err) => {
-        reject(err);
-      });
-    });
+    for (const styledata of stylesData) {
+      writeStream.write(`${styledata}\n`, (error) => reject(new Error(error)));
+    }
     resolve();
+  });
+};
+
+const copyAssetsFiles = (folderName) => {
+  const distAssetsFolderPath = path.join(distFullPath, folderName);
+  fs.mkdir(distAssetsFolderPath, (error) => {
+    if (error) return new Error(error);
+    copyAllFiles(folderName);
   });
 };
 
 const copyAllFiles = (dir) => {
   const fullPath = path.join(__dirname, dir);
-  fs.readdir(fullPath, { withFileTypes: true }, (err, items) => {
+  fs.readdir(fullPath, { withFileTypes: true }, (error, items) => {
+    if (error) return new Error(error);
     items.forEach((item) => {
       if (item.isDirectory()) {
-        fs.mkdir(path.join(distFullPath, dir, item.name), (err) => {
-          if (err) return console.log(err);
+        fs.mkdir(path.join(distFullPath, dir, item.name), (error) => {
+          if (error) return new Error(error);
           copyAllFiles(path.join(dir, item.name));
         });
       } else {
-        fs.copyFile(path.join(fullPath, item.name), path.join(distFullPath, dir, item.name), (err) => {
-          if (err) return console.log(err);
+        fs.copyFile(path.join(fullPath, item.name), path.join(distFullPath, dir, item.name), (error) => {
+          if (error) return new Error(error);
         });
       }
     });
   });
 };
 
-removeOldDist(distFullPath) // Удаляем прошлую версию папки есть она есть
-  .then((dir) => createDistFolder(dir)) // Создаем папку назначения
-  .then(() => readComponentsHtmlFiles(componentsFolderPath)) // Считывавем компоненты страницы
-  .then((components) => buildHtmlPageFromTemplate(templateFilePath, components)) // Правим темплейт страницы, заполняя его компонентами где необходимо и записываем итог
-  .then(() => readStylesData(styleFolderPath)) // Считываем файлы стилей в массив
-  .then((stylesData) => buildStyleBundle(distStyleFilePath, stylesData)) // Записываем данные стилей из массива в бандл
-  .then(() => copyAssetsFiles(assetsFolderName)) // Копируем рекурсивно папку с ассетами
-  .catch((error) => console.log(error)); // Отлавливаем ошибки по ходу работы
+buildDist();
