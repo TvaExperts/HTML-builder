@@ -16,9 +16,11 @@ const buildBundle = async () => {
       styleData.push(fileData);
     }
     const writeStream = fs.createWriteStream(distBundleFullPath);
+    let dataForWrite = '';
     styleData.forEach((data) => {
-      writeStream.write(data);
+      dataForWrite += data;
     });
+    writeStream.write(dataForWrite);
   } catch (error) {
     console.error(error);
   }

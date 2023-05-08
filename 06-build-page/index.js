@@ -60,7 +60,12 @@ const readFileToString = (file) => {
 const buildHtmlPageFromTemplate = (path, template, components) => {
   return new Promise((resolve, reject) => {
     components.forEach((component) => {
-      template = template.replace(`{{${component.name}}}`, component.html);
+      const indexStartComponent = template.indexOf(`{{${component.name}}}`);
+      const partOfFileBeforeComponent = template.slice(0, indexStartComponent);
+      const indexLastBreak = partOfFileBeforeComponent.lastIndexOf('\n');
+      const gap = indexStartComponent - indexLastBreak - 1;
+      component.html = component.html.replaceAll('\n','\n'+' '.repeat(gap));
+      template = template.replaceAll(`{{${component.name}}}`, component.html);
     });
     const writeStream = fs.createWriteStream(path);
     writeStream.write(template, (error) => {
@@ -76,7 +81,8 @@ const readStylesFromFolder = async (dir) => {
   const styleCssFiles = styleFiles.filter((file) => file.isFile() && path.extname(file.name) === '.css');
   for (const styleCssFile of styleCssFiles) {
     const pathFile = path.join(dir, styleCssFile.name);
-    const data = await readFileToString(pathFile);
+    let data = await readFileToString(pathFile);
+    data += '\n';
     stylesData.push(data);
   }
   return stylesData;
@@ -85,10 +91,14 @@ const readStylesFromFolder = async (dir) => {
 const buildStyleBundle = (bundlePath, stylesData) => {
   return new Promise((resolve, reject) => {
     const writeStream = fs.createWriteStream(bundlePath);
+    let dataForWrite = '';
     for (const styledata of stylesData) {
-      writeStream.write(`${styledata}\n`, (error) => reject(new Error(error)));
+      dataForWrite += styledata;
     }
-    resolve();
+    writeStream.write(dataForWrite, (error) => {
+      if (error) reject(new Error(error));
+      resolve();
+    });
   });
 };
 
