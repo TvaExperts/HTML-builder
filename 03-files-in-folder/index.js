@@ -16,7 +16,7 @@ fs.readdir(folderPath, { withFileTypes: true }, (error, data) => {
           console.error(new Error(error));
           return;
         }
-        console.log(`${file.name} - ${path.extname(file.name).slice(1)} - ${stats.size}`);
+        console.log(`${file.name.slice(0, -path.extname(file.name).length)} - ${path.extname(file.name).slice(1)} - ${stats.size}`);
       });
     }
   });
