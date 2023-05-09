@@ -8,7 +8,6 @@ fs.readdir(folderPath, { withFileTypes: true }, (error, data) => {
     console.error(new Error(error));
     return;
   }
-  console.log('Filename \t - \t Ext. \t - \t Size');
   data.forEach((file) => {
     if (file.isFile()) {
       const filePath = path.join(folderPath, file.name);
@@ -17,7 +16,7 @@ fs.readdir(folderPath, { withFileTypes: true }, (error, data) => {
           console.error(new Error(error));
           return;
         }
-        console.log(`${file.name} \t - \t ${path.extname(file.name)} \t - \t ${stats.size}`);
+        console.log(`${file.name} - ${path.extname(file.name).slice(1)} - ${stats.size}`);
       });
     }
   });
